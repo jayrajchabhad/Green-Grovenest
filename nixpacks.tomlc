@@ -1,0 +1,4 @@
+touch nixpacks.toml
+
+nano nixpacks.toml
+

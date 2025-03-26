@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<!-- saved from url=(0037)http://127.0.0.1:8000/admin/dashboard -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- CSRF Token -->
+    <meta name="csrf-token" content="rMm2B7aGXgKyNYRAfaEkeQi6NXXFBM8WKoky7aMc">
+
+    <title>  greengrovenest</title>
+
+        <!-- plugins:css -->
+        <link rel="stylesheet" href="./greengrovenest_files/leaflet.css">
+
+    <link rel="stylesheet" href="./greengrovenest_files/materialdesignicons.min.css">
+    <link rel="stylesheet" href="./greengrovenest_files/vendor.bundle.base.css">
+    <!-- endinject -->
+    <!-- plugin css for this page -->
+    <link rel="stylesheet" href="./greengrovenest_files/dataTables.bootstrap4.css">
+    <!-- End plugin css for this page -->
+    <!-- inject:css -->
+    <link rel="stylesheet" href="./greengrovenest_files/style.css">
+    <!-- endinject -->
+    <link rel="shortcut icon" href="http://127.0.0.1:8000/admin/images/favicon.ico">
+    
+    <script src="./greengrovenest_files/jquery-3.6.0.min.js"></script>
+
+    <style>
+        .sidebar .nav .nav-item.active{
+            background-color: #e9e9e9;
+            border-radius: 10px 0px  0px 10px;
+           
+        }
+      
+    </style>
+
+    <!-- Livewire Styles -->
+<style>
+    [wire\:loading], [wire\:loading\.delay], [wire\:loading\.inline-block], [wire\:loading\.inline], [wire\:loading\.block], [wire\:loading\.flex], [wire\:loading\.table], [wire\:loading\.grid], [wire\:loading\.inline-flex] {
+        display: none;
+    }
+
+    [wire\:loading\.delay\.shortest], [wire\:loading\.delay\.shorter], [wire\:loading\.delay\.short], [wire\:loading\.delay\.long], [wire\:loading\.delay\.longer], [wire\:loading\.delay\.longest] {
+        display:none;
+    }
+
+    [wire\:offline] {
+        display: none;
+    }
+
+    [wire\:dirty]:not(textarea):not(input):not(select) {
+        display: none;
+    }
+
+    input:-webkit-autofill, select:-webkit-autofill, textarea:-webkit-autofill {
+        animation-duration: 50000s;
+        animation-name: livewireautofill;
+    }
+
+    @keyframes livewireautofill { from {} }
+</style>
+
+</head> 
+<body>
+
+    <div class="container-scroller">
+        <nav class="navbar col-lg-12 col-12 p-0 fixed-top d-flex flex-row">
+    <div class="navbar-brand-wrapper d-flex justify-content-center">
+      <div class="navbar-brand-inner-wrapper d-flex justify-content-between align-items-center w-100">
+        <a class="navbar-brand brand-logo" href="http://127.0.0.1:8000/admin/dashboard">Green Grovenest</a>       
+        <a class="navbar-brand brand-logo-mini" href="http://127.0.0.1:8000/admin/dashboard"><img src="./greengrovenest_files/logo.png" class="img-fluid ">
+        </a>
+        <button class="navbar-toggler navbar-toggler align-self-center" type="button" data-toggle="minimize">
+          <span class="mdi mdi-sort-variant"></span>
+        </button>
+      </div>
+    </div>
+    <div class="navbar-menu-wrapper d-flex align-items-center justify-content-end">
+      
+      <ul class="navbar-nav navbar-nav-right">
+        <li class="nav-item dropdown me-1">
+          <a class="nav-link count-indicator dropdown-toggle d-flex align-items-center" id="messageDropdown" href="http://127.0.0.1:8000/admin/dashboard#" data-bs-toggle="dropdown">
+            <i class="mdi mdi-message-text mx-0"></i>
+            <span class="count"></span>
+          </a>
+        
+          <div class="dropdown-menu dropdown-menu-right navbar-dropdown preview-list" aria-labelledby="messageDropdown">
+            <p class="mb-0 font-weight-normal float-left dropdown-header">Messages</p>
+        
+                    
+          </div>
+        </li>
+        
+
+        <li class="nav-item dropdown me-4">
+          <a class="nav-link count-indicator dropdown-toggle d-flex align-items-center justify-content-center notification-dropdown" id="notificationDropdown" href="http://127.0.0.1:8000/admin/dashboard#" data-bs-toggle="dropdown">
+            <i class="mdi mdi-bell mx-0"></i>
+            <span class="count"></span>
+          </a>
+            <div class="dropdown-menu dropdown-menu-right navbar-dropdown preview-list" aria-labelledby="notificationDropdown">
+              <p class="mb-0 font-weight-normal float-left dropdown-header">Notifications</p>
+              <a class="dropdown-item preview-item">
+                <div class="preview-thumbnail">
+                  <div class="preview-icon bg-success">
+                    <i class="mdi mdi-information mx-0"></i>
+                  </div>
+                </div>
+                <div class="preview-item-content">
+                  <h6 class="preview-subject font-weight-normal">Application Error</h6>
+                  <p class="font-weight-light small-text mb-0 text-muted">
+                    Just now
+                  </p>
+                </div>
+              </a>
+              <a class="dropdown-item preview-item">
+                <div class="preview-thumbnail">
+                  <div class="preview-icon bg-warning">
+                    <i class="mdi mdi-weather-sunny mx-0"></i>
+                  </div>
+                </div>
+                <div class="preview-item-content">
+                  <h6 class="preview-subject font-weight-normal">Settings</h6>
+                  <p class="font-weight-light small-text mb-0 text-muted">
+                    Private message
+                  </p>
+                </div>
+              </a>
+              <a class="dropdown-item preview-item">
+                <div class="preview-thumbnail">
+                  <div class="preview-icon bg-info">
+                    <i class="mdi mdi-account-box mx-0"></i>
+                  </div>
+                </div>
+                <div class="preview-item-content">
+                  <h6 class="preview-subject font-weight-normal">New user registration</h6>
+                  <p class="font-weight-light small-text mb-0 text-muted">
+                    2 days ago
+                  </p>
+                </div>
+              </a>
+            </div>
+        </li>
+
+        <li class="nav-item nav-profile dropdown">
+          <a class="nav-link dropdown-toggle d-flex align-items-center" href="http://127.0.0.1:8000/admin/dashboard#" data-bs-toggle="dropdown" id="profileDropdown">
+            <!-- User Profile Image or First Letter -->
+            <div class="profile-img-container">
+                                    <div class="profile-placeholder">j</div>
+                            </div>
+            <!-- User Name -->
+            <span class="nav-profile-name ms-2">jayraj</span>
+        </a>
+        
+          <div class="dropdown-menu dropdown-menu-right navbar-dropdown" aria-labelledby="profileDropdown">
+            <a class="dropdown-item" href="http://127.0.0.1:8000/admin/settings">
+              <i class="mdi mdi-cog text-primary"></i>
+              Settings
+            </a>
+           
+            <a class="dropdown-item" href="http://127.0.0.1:8000/logout" onclick="event.preventDefault();
+                          document.getElementById(&#39;logout-form&#39;).submit();">
+             <i class="mdi mdi-logout text-primary"></i> Logout
+         </a>
+
+         <form id="logout-form" action="http://127.0.0.1:8000/logout" method="POST" class="d-none">
+             <input type="hidden" name="_token" value="rMm2B7aGXgKyNYRAfaEkeQi6NXXFBM8WKoky7aMc">         </form>
+          </div>
+        </li>
+        <li class="nav-item nav-settings d-none d-lg-flex">
+          <a class="nav-link" href="http://127.0.0.1:8000/admin/dashboard#">
+            <i class="mdi mdi-apps"></i>
+          </a>
+        </li>
+      </ul>
+      <button class="navbar-toggler navbar-toggler-right d-lg-none align-self-center" type="button" data-toggle="offcanvas">
+        <span class="mdi mdi-menu"></span>
+      </button>
+    </div>
+  </nav>
+
+<style>
+.navbar-brand {
+    font-weight: bold;
+    color: #fff;
+
+}
+.profile-img-container {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid #007bff; /* Blue border */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: bold;
+    color: white;
+    background-color: #007bff; /* Blue background */
+    overflow: hidden;
+}
+
+/* Profile Image Styling */
+.profile-img-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+/* If no image, show the first letter */
+.profile-img-container span {
+    display: block;
+}
+
+</style>
+        <div class="container-fluid page-body-wrapper">      
+            <nav class="sidebar border-0 sidebar-offcanvas bg-light" id="sidebar" style="">
+    <ul class="nav">
+      <li class="nav-item active">
+        <a class="nav-link" href="http://127.0.0.1:8000/admin/dashboard">
+          <i class="mdi mdi-speedometer menu-icon "></i>
+          <span class="menu-title">Dashboard</span>
+        </a>
+      </li>   
+
+      <li class="nav-item  ">
+        <a class="nav-link" href="http://127.0.0.1:8000/admin/orders">
+          <i class="mdi mdi-sale menu-icon "></i>
+          <span class="menu-title">Orders</span>
+        </a>
+      </li> 
+
+      <li class="nav-item  ">
+        <a class="nav-link" data-bs-toggle="collapse" href="http://127.0.0.1:8000/admin/dashboard#category" aria-expanded="false ">
+
+          <i class="mdi mdi-view-list menu-icon "></i>
+          <span class="menu-title">Category</span>
+          <i class="menu-arrow"></i>
+        </a>
+        <div class="collapse  " id="category">
+          <ul class="nav flex-column sub-menu">      
+            <li class="nav-item"><a class="nav-link   " href="http://127.0.0.1:8000/admin/category/C-create">Add Category</a></li>     
+            <li class="nav-item"><a class="nav-link   " href="http://127.0.0.1:8000/admin/category">View Category</a></li>                    
+          </ul>
+        </div>
+      </li>    
+      
+      <li class="nav-item ">
+        <a class="nav-link" data-bs-toggle="collapse" href="http://127.0.0.1:8000/admin/dashboard#products" aria-expanded="false ">
+          <i class="mdi mdi-plus-circle menu-icon "></i>
+          <span class="menu-title">Products</span>
+          <i class="menu-arrow"></i>
+        </a>
+        <div class="collapse  " id="products">
+          <ul class="nav flex-column sub-menu">      
+            <li class="nav-item"><a class="nav-link   " href="http://127.0.0.1:8000/admin/products/P-create">Add Product</a></li>          
+            <li class="nav-item"><a class="nav-link  " href="http://127.0.0.1:8000/admin/products">View Product</a></li>          
+          </ul>
+        </div>
+      </li>    
+
+      <li class="nav-item ">
+        <a class="nav-link" data-bs-toggle="collapse" href="http://127.0.0.1:8000/admin/dashboard#recommendations" aria-expanded="false">
+            <i class="mdi mdi-plus-circle menu-icon"></i>
+            <span class="menu-title">Recommendations Product</span>
+            <i class="menu-arrow"></i>
+        </a>
+        <div class="collapse " id="recommendations">
+            <ul class="nav flex-column sub-menu">
+                <li class="nav-item">
+                    <a class="nav-link " href="http://127.0.0.1:8000/admin/recommendationCreate">Add Product</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link " href="http://127.0.0.1:8000/admin/recommendations">View Product</a>
+                </li>
+            </ul>
+        </div>
+    </li>
+        
+       
+
+      <li class="nav-item">
+        <a class="nav-link" href="http://127.0.0.1:8000/admin/brands">
+          <i class="mdi mdi-view-headline menu-icon "></i>
+          <span class="menu-title">Brands</span>
+        </a>
+      </li>  
+
+      <li class="nav-item">
+        <a class="nav-link" href="http://127.0.0.1:8000/admin/colors">
+          <i class="mdi mdi-chart-pie menu-icon "></i>
+          <span class="menu-title">Colors</span>
+        </a>
+      </li> 
+
+      <li class="nav-item">
+        <a class="nav-link" href="http://127.0.0.1:8000/admin/slider">
+          <i class="mdi mdi-view-carousel menu-icon "></i>
+          <span class="menu-title">Home Sliders</span>
+        </a>
+      </li> 
+
+      <li class="nav-item">
+        <a class="nav-link" href="http://127.0.0.1:8000/admin/settings">
+          <i class="mdi mdi-cogs menu-icon"></i>
+          <span class="menu-title">Site Setting</span>
+        </a>
+      </li> 
+
+
+      <li class="nav-item">
+        <a class="nav-link" href="http://127.0.0.1:8000/admin/contactUs">
+          <i class="mdi mdi-email-outline menu-icon"></i>
+          <span class="menu-title">Contact Info</span>
+        </a>
+      </li> 
+
+      
+
+
+      <li class="nav-item ">
+        <a class="nav-link" data-bs-toggle="collapse" href="http://127.0.0.1:8000/admin/dashboard#user" aria-expanded="false ">
+          <i class="mdi mdi-account menu-icon "></i>
+          
+          <span class="menu-title">Users</span>
+          <i class="menu-arrow"></i>
+        </a>
+        <div class="collapse { Request::is(&#39;admin/user*&#39;) ? &#39;show&#39;:&#39;&#39; }} " id="user">
+          <ul class="nav flex-column sub-menu">
+            <li class="nav-item"> <a class="nav-link  " href="http://127.0.0.1:8000/admin/users/add_user"> Add users </a></li>
+            <li class="nav-item"> <a class="nav-link  " href="http://127.0.0.1:8000/admin/users">View user </a></li>
+                           
+          </ul>
+        </div>
+      </li>
+     
+    </ul>
+  </nav>
+
+
+
+  <link href="./greengrovenest_files/materialdesignicons(1).min.css" rel="stylesheet">
+
+
+            <div class="main-panel">
+                <div class="content-wrapper">
+                    
+ <style>
+  #view{
+    text-decoration: none;
+    margin-left: 87%;
+  }
+ </style>
+
+ <div class="row">
+
+  <h1></h1>
+
+    <div class="col-md-12 grid-margin">
+            <div class="me-md-3 me-xl-5">
+        <h2>Dashboard,</h2>
+        <p class="mb-md-0">Your analytics dashboard template.</p>
+        <hr>
+      </div>
+
+
+      <div class="row">
+        <div class="col-md-3">
+          <div class="card card-body bg-info text-white mb-3 rounded">
+              <label>Total Orders</label>
+              <h1>7</h1>
+              <a href="http://127.0.0.1:8000/admin/orders" class="text-white " id="view">view</a>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="card card-body bg-success text-white mb-3 rounded">
+              <label>Today Orders</label>
+              <h1>0</h1>
+              <a href="http://127.0.0.1:8000/admin/orders" class="text-white " id="view">view</a>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="card card-body bg-warning text-white mb-3 rounded">
+              <label>This Month Orders</label>
+              <h1>7</h1>
+              <a href="http://127.0.0.1:8000/admin/orders" class="text-white " id="view">view</a>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="card card-body bg-danger text-white mb-3 rounded">
+              <label>Year Orders</label>
+              <h1>7</h1>
+              <a href="http://127.0.0.1:8000/admin/orders" class="text-white " id="view">view</a>
+          </div>
+        </div>
+      </div>
+      <hr>
+      
+      <div class="row">
+        <div class="col-md-3">
+          <div class="card card-body bg-primary text-white mb-3  rounded">
+              <label>Total Product</label>
+              <h1>31</h1>
+              <a href="http://127.0.0.1:8000/admin/products" class="text-white " id="view">view</a>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="card card-body bg-success text-white mb-3 rounded">
+              <label>Total Category</label>
+              <h1>9</h1>
+              <a href="http://127.0.0.1:8000/admin/orders" class="text-white " id="view">view</a>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="card card-body bg-warning text-white mb-3 rounded">
+              <label>Total Brand</label>
+              <h1>30</h1>
+              <a href="http://127.0.0.1:8000/admin/orders" class="text-white " id="view">view</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-md-3">
+          <div class="card card-body bg-primary text-white mb-3 rounded">
+              <label>All Users</label>
+              <h1>3</h1>
+              <a href="http://127.0.0.1:8000/admin/users" class="text-white " id="view">view</a>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="card card-body bg-success text-white mb-3 rounded">
+              <label>Total Gast Users</label>
+              <h1>1</h1>
+              <a href="http://127.0.0.1:8000/admin/users" class="text-white " id="view">view</a>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="card card-body bg-warning text-white mb-3 rounded">
+              <label>Total Admins</label>
+              <h1>2</h1>
+              <a href="http://127.0.0.1:8000/admin/users" class="text-white " id="view">view</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+</div> 
+                 </div>
+            </div>
+
+        </div>
+    </div>
+
+    
+  
+      
+      
+      
+
+        <!-- plugins:js -->
+        <script src="./greengrovenest_files/leaflet.js"></script>
+        <script src="./greengrovenest_files/vendor.bundle.base.js"></script>
+    <!-- endinject -->
+    <!-- Plugin js for this page-->
+    <script src="./greengrovenest_files/chart.umd.js"></script>
+    <script src="./greengrovenest_files/jquery.dataTables.js"></script>
+    <script src="./greengrovenest_files/dataTables.bootstrap4.js"></script>
+    <!-- End plugin js for this page-->
+    <!-- inject:js -->
+    <script src="./greengrovenest_files/off-canvas.js"></script>
+    <script src="./greengrovenest_files/hoverable-collapse.js"></script>
+    <script src="./greengrovenest_files/template.js"></script>
+    <script src="./greengrovenest_files/settings.js"></script>
+    <script src="./greengrovenest_files/todolist.js"></script>
+    <!-- endinject -->
+    <!-- Custom js for this page-->
+    <script src="./greengrovenest_files/dashboard.js"></script>
+    <script src="./greengrovenest_files/proBanner.js"></script>
+
+    
+    <!-- Livewire Scripts -->
+
+<script src="./greengrovenest_files/livewire.js" data-turbo-eval="false" data-turbolinks-eval="false"></script>
+<script data-turbo-eval="false" data-turbolinks-eval="false">
+    if (window.livewire) {
+	    console.warn('Livewire: It looks like Livewire\'s @livewireScripts JavaScript assets have already been loaded. Make sure you aren\'t loading them twice.')
+	}
+
+    window.livewire = new Livewire();
+    window.livewire.devTools(true);
+    window.Livewire = window.livewire;
+    window.livewire_app_url = '';
+    window.livewire_token = 'rMm2B7aGXgKyNYRAfaEkeQi6NXXFBM8WKoky7aMc';
+
+	/* Make sure Livewire loads first. */
+	if (window.Alpine) {
+	    /* Defer showing the warning so it doesn't get buried under downstream errors. */
+	    document.addEventListener("DOMContentLoaded", function () {
+	        setTimeout(function() {
+	            console.warn("Livewire: It looks like AlpineJS has already been loaded. Make sure Livewire\'s scripts are loaded before Alpine.\\n\\n Reference docs for more info: http://laravel-livewire.com/docs/alpine-js")
+	        })
+	    });
+	}
+
+	/* Make Alpine wait until Livewire is finished rendering to do its thing. */
+    window.deferLoadingAlpine = function (callback) {
+        window.addEventListener('livewire:load', function () {
+            callback();
+        });
+    };
+
+    let started = false;
+
+    window.addEventListener('alpine:initializing', function () {
+        if (! started) {
+            window.livewire.start();
+
+            started = true;
+        }
+    });
+
+    document.addEventListener("DOMContentLoaded", function () {
+        if (! started) {
+            window.livewire.start();
+
+            started = true;
+        }
+    });
+</script>
+    
+
+</body></html>
