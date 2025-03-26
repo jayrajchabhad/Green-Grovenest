@@ -5,7 +5,8 @@
     "keywords": ["framework", "laravel"],
     "license": "MIT",
     "require": {
-        "php": "^8.0.2",
+        "php": "^8.3",
+        "ext-mongodb": "*",
         "barryvdh/laravel-dompdf": "^3.1",
         "guzzlehttp/guzzle": "^7.2",
         "laravel/framework": "10.*",
@@ -13,7 +14,7 @@
         "laravel/tinker": "^2.7",
         "laravel/ui": "^4.6",
         "livewire/livewire": "^2.12",
-        "mongodb/laravel-mongodb": "^4.2",
+        "mongodb/laravel-mongodb": "^5.2",
         "mongodb/mongodb": "^1.9",
         "razorpay/razorpay": "^2.9",
         "spatie/laravel-ignition": "^2.0"

@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace MongoDB\Laravel\Schema;
 
-use Illuminate\Database\Connection;
-use Illuminate\Database\Schema\Blueprint as SchemaBlueprint;
-use MongoDB\Laravel\Collection;
+use Illuminate\Database\Schema\Blueprint as BaseBlueprint;
+use MongoDB\Collection;
+use MongoDB\Laravel\Connection;
 
 use function array_flip;
 use function implode;
@@ -16,19 +16,16 @@ use function is_int;
 use function is_string;
 use function key;
 
-class Blueprint extends SchemaBlueprint
+/** @property Connection $connection */
+class Blueprint extends BaseBlueprint
 {
-    /**
-     * The MongoConnection object for this blueprint.
-     *
-     * @var \MongoDB\Laravel\Connection
-     */
-    protected $connection;
+    // Import $connection property and constructor for Laravel 12 compatibility
+    use BlueprintLaravelCompatibility;
 
     /**
-     * The MongoCollection object for this blueprint.
+     * The MongoDB collection object for this blueprint.
      *
-     * @var Collection|\MongoDB\Collection
+     * @var Collection
      */
     protected $collection;
 
@@ -38,18 +35,6 @@ class Blueprint extends SchemaBlueprint
      * @var array
      */
     protected $columns = [];
-
-    /**
-     * Create a new schema blueprint.
-     */
-    public function __construct(Connection $connection, string $collection)
-    {
-        parent::__construct($collection);
-
-        $this->connection = $connection;
-
-        $this->collection = $this->connection->getCollection($collection);
-    }
 
     /** @inheritdoc */
     public function index($columns = null, $name = null, $algorithm = null, $options = [])
@@ -178,22 +163,6 @@ class Blueprint extends SchemaBlueprint
     }
 
     /**
-     * Specify a non blocking index for the collection.
-     *
-     * @param string|array $columns
-     *
-     * @return Blueprint
-     */
-    public function background($columns = null)
-    {
-        $columns = $this->fluent($columns);
-
-        $this->index($columns, null, null, ['background' => true]);
-
-        return $this;
-    }
-
-    /**
      * Specify a sparse index for the collection.
      *
      * @param string|array $columns
@@ -267,7 +236,7 @@ class Blueprint extends SchemaBlueprint
     {
         $collection = $this->collection->getCollectionName();
 
-        $db = $this->connection->getMongoDB();
+        $db = $this->connection->getDatabase();
 
         // Ensure the collection is created.
         $db->createCollection($collection, $options);
@@ -315,6 +284,52 @@ class Blueprint extends SchemaBlueprint
         $options['unique'] = true;
 
         $this->index($columns, null, null, $options);
+
+        return $this;
+    }
+
+    /**
+     * Create an Atlas Search Index.
+     *
+     * @see https://www.mongodb.com/docs/manual/reference/command/createSearchIndexes/#std-label-search-index-definition-create
+     *
+     * @phpstan-param array{
+     *      analyzer?: string,
+     *      analyzers?: list<array>,
+     *      searchAnalyzer?: string,
+     *      mappings: array{dynamic: true} | array{dynamic?: bool, fields: array<string, array>},
+     *      storedSource?: bool|array,
+     *      synonyms?: list<array>,
+     *      ...
+     *  } $definition
+     */
+    public function searchIndex(array $definition, string $name = 'default'): static
+    {
+        $this->collection->createSearchIndex($definition, ['name' => $name, 'type' => 'search']);
+
+        return $this;
+    }
+
+    /**
+     * Create an Atlas Vector Search Index.
+     *
+     * @see https://www.mongodb.com/docs/manual/reference/command/createSearchIndexes/#std-label-vector-search-index-definition-create
+     *
+     * @phpstan-param array{fields: array<string, array{type: string, ...}>} $definition
+     */
+    public function vectorSearchIndex(array $definition, string $name = 'default'): static
+    {
+        $this->collection->createSearchIndex($definition, ['name' => $name, 'type' => 'vectorSearch']);
+
+        return $this;
+    }
+
+    /**
+     * Drop an Atlas Search or Vector Search index
+     */
+    public function dropSearchIndex(string $name): static
+    {
+        $this->collection->dropSearchIndex($name);
 
         return $this;
     }

@@ -1,4 +1,4 @@
-FROM ubuntu:24.04
+FROM php:8.3-fpm
 
 LABEL maintainer="Taylor Otwell"
 
@@ -19,7 +19,12 @@ RUN echo "Acquire::http::Pipeline-Depth 0;" > /etc/apt/apt.conf.d/99custom && \
     echo "Acquire::http::No-Cache true;" >> /etc/apt/apt.conf.d/99custom && \
     echo "Acquire::BrokenProxy    true;" >> /etc/apt/apt.conf.d/99custom
 
-RUN apt-get update && apt-get upgrade -y \
+RUN apt-get update && apt-get install -y \
+    libcurl4-openssl-dev pkg-config libssl-dev libpng-dev \
+    && pecl install mongodb \
+    && docker-php-ext-enable mongodb \
+    && docker-php-ext-install pdo_mysql pdo_pgsql gd \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
     && mkdir -p /etc/apt/keyrings \
     && apt-get install -y gnupg gosu curl ca-certificates zip unzip git supervisor sqlite3 libcap2-bin libpng-dev python3 dnsutils librsvg2-bin fswatch ffmpeg nano \
     && curl -sS 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xb8dc7e53946656efbce4c1dd71daeaab4ad4cab6' | gpg --dearmor | tee /usr/share/keyrings/ppa_ondrej_php.gpg > /dev/null \

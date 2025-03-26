@@ -9,11 +9,13 @@ use BadMethodCallException;
 use Carbon\CarbonPeriod;
 use Closure;
 use DateTimeInterface;
+use DateTimeZone;
 use Illuminate\Database\Query\Builder as BaseBuilder;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\LazyCollection;
 use InvalidArgumentException;
 use LogicException;
@@ -21,24 +23,31 @@ use MongoDB\BSON\Binary;
 use MongoDB\BSON\ObjectID;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
+use MongoDB\Builder\Search;
 use MongoDB\Builder\Stage\FluentFactoryTrait;
+use MongoDB\Builder\Type\QueryInterface;
+use MongoDB\Builder\Type\SearchOperatorInterface;
 use MongoDB\Driver\Cursor;
+use MongoDB\Driver\ReadPreference;
 use Override;
 use RuntimeException;
+use stdClass;
+use TypeError;
 
 use function array_fill_keys;
+use function array_filter;
 use function array_is_list;
 use function array_key_exists;
 use function array_map;
 use function array_merge;
 use function array_values;
-use function array_walk_recursive;
 use function assert;
 use function blank;
 use function call_user_func;
 use function call_user_func_array;
 use function count;
 use function ctype_xdigit;
+use function date_default_timezone_get;
 use function dd;
 use function dump;
 use function end;
@@ -46,6 +55,7 @@ use function explode;
 use function func_get_args;
 use function func_num_args;
 use function get_debug_type;
+use function get_object_vars;
 use function implode;
 use function in_array;
 use function is_array;
@@ -53,13 +63,16 @@ use function is_bool;
 use function is_callable;
 use function is_float;
 use function is_int;
+use function is_object;
 use function is_string;
 use function md5;
 use function preg_match;
 use function preg_quote;
 use function preg_replace;
+use function property_exists;
 use function serialize;
 use function sprintf;
+use function str_contains;
 use function str_ends_with;
 use function str_replace;
 use function str_starts_with;
@@ -76,7 +89,7 @@ class Builder extends BaseBuilder
     /**
      * The database collection.
      *
-     * @var \MongoDB\Laravel\Collection
+     * @var \MongoDB\Collection
      */
     protected $collection;
 
@@ -90,7 +103,7 @@ class Builder extends BaseBuilder
     /**
      * The maximum amount of seconds to allow the query to run.
      *
-     * @var int
+     * @var int|float
      */
     public $timeout;
 
@@ -100,6 +113,8 @@ class Builder extends BaseBuilder
      * @var int
      */
     public $hint;
+
+    private ReadPreference $readPreference;
 
     /**
      * Custom options to add to the query.
@@ -199,7 +214,7 @@ class Builder extends BaseBuilder
     /**
      * The maximum amount of seconds to allow the query to run.
      *
-     * @param  int $seconds
+     * @param  int|float $seconds
      *
      * @return $this
      */
@@ -298,11 +313,13 @@ class Builder extends BaseBuilder
         }
 
         $wheres = $this->compileWheres();
+        $wheres = $this->aliasIdForQuery($wheres);
 
         // Use MongoDB's aggregation framework when using grouping or aggregation functions.
         if ($this->groups || $this->aggregate) {
             $group   = [];
             $unwinds = [];
+            $set = [];
 
             // Add grouping columns to the $group part of the aggregation pipeline.
             if ($this->groups) {
@@ -313,8 +330,10 @@ class Builder extends BaseBuilder
                     // this mimics SQL's behaviour a bit.
                     $group[$column] = ['$last' => '$' . $column];
                 }
+            }
 
-                // Do the same for other columns that are selected.
+            // Add the last value of each column when there is no aggregate function.
+            if ($this->groups && ! $this->aggregate) {
                 foreach ($columns as $column) {
                     $key = str_replace('.', '_', $column);
 
@@ -338,15 +357,22 @@ class Builder extends BaseBuilder
 
                     $aggregations = blank($this->aggregate['columns']) ? [] : $this->aggregate['columns'];
 
-                    if (in_array('*', $aggregations) && $function === 'count') {
-                        $options = $this->inheritConnectionOptions();
+                    if ($column === '*' && $function === 'count' && ! $this->groups) {
+                        $options = $this->inheritConnectionOptions($this->options);
 
                         return ['countDocuments' => [$wheres, $options]];
                     }
 
+                    // "aggregate" is the name of the field that will hold the aggregated value.
                     if ($function === 'count') {
-                        // Translate count into sum.
-                        $group['aggregate'] = ['$sum' => 1];
+                        if ($column === '*' || $aggregations === []) {
+                            // Translate count into sum.
+                            $group['aggregate'] = ['$sum' => 1];
+                        } else {
+                            // Count the number of distinct values.
+                            $group['aggregate'] = ['$addToSet' => '$' . $column];
+                            $set['aggregate'] = ['$size' => '$aggregate'];
+                        }
                     } else {
                         $group['aggregate'] = ['$' . $function => '$' . $column];
                     }
@@ -373,9 +399,13 @@ class Builder extends BaseBuilder
                 $pipeline[] = ['$group' => $group];
             }
 
+            if ($set) {
+                $pipeline[] = ['$set' => $set];
+            }
+
             // Apply order and limit
             if ($this->orders) {
-                $pipeline[] = ['$sort' => $this->orders];
+                $pipeline[] = ['$sort' => $this->aliasIdForQuery($this->orders)];
             }
 
             if ($this->offset) {
@@ -391,7 +421,7 @@ class Builder extends BaseBuilder
             }
 
             $options = [
-                'typeMap' => ['root' => 'array', 'document' => 'array'],
+                'typeMap' => ['root' => 'object', 'document' => 'array'],
             ];
 
             // Add custom query options
@@ -416,7 +446,7 @@ class Builder extends BaseBuilder
 
         // Normal query
         // Convert select columns to simple projections.
-        $projection = array_fill_keys($columns, true);
+        $projection = $this->aliasIdForQuery(array_fill_keys($columns, true));
 
         // Add custom projections.
         if ($this->projections) {
@@ -427,11 +457,11 @@ class Builder extends BaseBuilder
 
         // Apply order, offset, limit and projection
         if ($this->timeout) {
-            $options['maxTimeMS'] = $this->timeout * 1000;
+            $options['maxTimeMS'] = (int) ($this->timeout * 1000);
         }
 
         if ($this->orders) {
-            $options['sort'] = $this->orders;
+            $options['sort'] = $this->aliasIdForQuery($this->orders);
         }
 
         if ($this->offset) {
@@ -450,8 +480,7 @@ class Builder extends BaseBuilder
             $options['projection'] = $projection;
         }
 
-        // Fix for legacy support, converts the results to arrays instead of objects.
-        $options['typeMap'] = ['root' => 'array', 'document' => 'array'];
+        $options['typeMap'] = ['root' => 'object', 'document' => 'array'];
 
         // Add custom query options
         if (count($this->options)) {
@@ -506,13 +535,19 @@ class Builder extends BaseBuilder
         if ($returnLazy) {
             return LazyCollection::make(function () use ($result) {
                 foreach ($result as $item) {
-                    yield $item;
+                    yield $this->aliasIdForResult($item);
                 }
             });
         }
 
         if ($result instanceof Cursor) {
             $result = $result->toArray();
+        }
+
+        foreach ($result as &$document) {
+            if (is_array($document) || is_object($document)) {
+                $document = $this->aliasIdForResult($document);
+            }
         }
 
         return new Collection($result);
@@ -543,6 +578,8 @@ class Builder extends BaseBuilder
     /** @return ($function is null ? AggregationBuilder : mixed) */
     public function aggregate($function = null, $columns = ['*'])
     {
+        assert(is_array($columns), new TypeError(sprintf('Argument #2 ($columns) must be of type array, %s given', get_debug_type($columns))));
+
         if ($function === null) {
             if (! trait_exists(FluentFactoryTrait::class)) {
                 // This error will be unreachable when the mongodb/builder package will be merged into mongodb/mongodb
@@ -583,6 +620,15 @@ class Builder extends BaseBuilder
         $this->columns            = $previousColumns;
         $this->bindings['select'] = $previousSelectBindings;
 
+        // When the aggregation is per group, we return the results as is.
+        if ($this->groups) {
+            return $results->map(function (object $result) {
+                unset($result->id);
+
+                return $result;
+            });
+        }
+
         if (isset($results[0])) {
             $result = (array) $results[0];
 
@@ -590,10 +636,24 @@ class Builder extends BaseBuilder
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @see \Illuminate\Database\Query\Builder::aggregateByGroup()
+     */
+    public function aggregateByGroup(string $function, array $columns = ['*'])
+    {
+        if (count($columns) > 1) {
+            throw new InvalidArgumentException('Aggregating by group requires zero or one columns.');
+        }
+
+        return $this->aggregate($function, $columns);
+    }
+
     /** @inheritdoc */
     public function exists()
     {
-        return $this->first(['_id']) !== null;
+        return $this->first(['id']) !== null;
     }
 
     /** @inheritdoc */
@@ -682,6 +742,8 @@ class Builder extends BaseBuilder
             $values = [$values];
         }
 
+        $values = $this->aliasIdForQuery($values);
+
         $options = $this->inheritConnectionOptions();
 
         $result = $this->collection->insertMany($values, $options);
@@ -694,17 +756,18 @@ class Builder extends BaseBuilder
     {
         $options = $this->inheritConnectionOptions();
 
+        $values = $this->aliasIdForQuery($values);
+
         $result = $this->collection->insertOne($values, $options);
 
         if (! $result->isAcknowledged()) {
             return null;
         }
 
-        if ($sequence === null || $sequence === '_id') {
-            return $result->getInsertedId();
-        }
-
-        return $values[$sequence];
+        return match ($sequence) {
+            '_id', 'id', null => $result->getInsertedId(),
+            default => $values[$sequence],
+        };
     }
 
     /** @inheritdoc */
@@ -720,7 +783,12 @@ class Builder extends BaseBuilder
             unset($values[$key]);
         }
 
-        $options = $this->inheritConnectionOptions($options);
+        // Since "id" is an alias for "_id", we prevent updating it
+        foreach ($values as $fields) {
+            if (array_key_exists('id', $fields)) {
+                throw new InvalidArgumentException('Cannot update "id" field.');
+            }
+        }
 
         return $this->performUpdate($values, $options);
     }
@@ -827,30 +895,9 @@ class Builder extends BaseBuilder
     }
 
     /** @inheritdoc */
-    public function chunkById($count, callable $callback, $column = '_id', $alias = null)
-    {
-        return parent::chunkById($count, $callback, $column, $alias);
-    }
-
-    /** @inheritdoc */
-    public function forPageAfterId($perPage = 15, $lastId = 0, $column = '_id')
-    {
-        return parent::forPageAfterId($perPage, $lastId, $column);
-    }
-
-    /** @inheritdoc */
     public function pluck($column, $key = null)
     {
         $results = $this->get($key === null ? [$column] : [$column, $key]);
-
-        // Convert ObjectID's to strings
-        if (((string) $key) === '_id') {
-            $results = $results->map(function ($item) {
-                $item['_id'] = (string) $item['_id'];
-
-                return $item;
-            });
-        }
 
         $p = Arr::pluck($results, $column, $key);
 
@@ -868,13 +915,14 @@ class Builder extends BaseBuilder
         }
 
         $wheres  = $this->compileWheres();
+        $wheres  = $this->aliasIdForQuery($wheres);
         $options = $this->inheritConnectionOptions();
 
-        if (is_int($this->limit)) {
-            if ($this->limit !== 1) {
-                throw new LogicException(sprintf('Delete limit can be 1 or null (unlimited). Got %d', $this->limit));
-            }
-
+        /**
+         * Ignore the limit if it is set to more than 1, as it is not supported by the deleteMany method.
+         * Required for {@see DatabaseFailedJobProvider::prune()}
+         */
+        if ($this->limit === 1) {
             $result = $this->collection->deleteOne($wheres, $options);
         } else {
             $result = $this->collection->deleteMany($wheres, $options);
@@ -1053,23 +1101,24 @@ class Builder extends BaseBuilder
     /**
      * Perform an update query.
      *
-     * @param  array $query
-     *
      * @return int
      */
-    protected function performUpdate($query, array $options = [])
+    protected function performUpdate(array $update, array $options = [])
     {
         // Update multiple items by default.
         if (! array_key_exists('multiple', $options)) {
             $options['multiple'] = true;
         }
 
+        $update = $this->aliasIdForQuery($update);
+
         $options = $this->inheritConnectionOptions($options);
 
         $wheres = $this->compileWheres();
-        $result = $this->collection->updateMany($wheres, $query, $options);
+        $wheres = $this->aliasIdForQuery($wheres);
+        $result = $this->collection->updateMany($wheres, $update, $options);
         if ($result->isAcknowledged()) {
-            return $result->getModifiedCount() ? $result->getModifiedCount() : $result->getUpsertedCount();
+            return $result->getModifiedCount() ?: $result->getUpsertedCount();
         }
 
         return 0;
@@ -1160,45 +1209,30 @@ class Builder extends BaseBuilder
             // Convert column name to string to use as array key
             if (isset($where['column'])) {
                 $where['column'] = (string) $where['column'];
-            }
 
-            // Convert id's.
-            if (isset($where['column']) && ($where['column'] === '_id' || str_ends_with($where['column'], '._id'))) {
-                if (isset($where['values'])) {
-                    // Multiple values.
-                    $where['values'] = array_map($this->convertKey(...), $where['values']);
-                } elseif (isset($where['value'])) {
-                    // Single value.
-                    $where['value'] = $this->convertKey($where['value']);
+                // Compatibility with Eloquent queries that uses "id" instead of MongoDB's _id
+                if ($where['column'] === 'id') {
+                    $where['column'] = '_id';
                 }
-            }
 
-            // Convert DateTime values to UTCDateTime.
-            if (isset($where['value'])) {
-                if (is_array($where['value'])) {
-                    array_walk_recursive($where['value'], function (&$item, $key) {
-                        if ($item instanceof DateTimeInterface) {
-                            $item = new UTCDateTime($item);
-                        }
-                    });
-                } else {
-                    if ($where['value'] instanceof DateTimeInterface) {
-                        $where['value'] = new UTCDateTime($where['value']);
+                // Convert id's.
+                if ($where['column'] === '_id' || str_ends_with($where['column'], '._id')) {
+                    if (isset($where['values'])) {
+                        // Multiple values.
+                        $where['values'] = array_map($this->convertKey(...), $where['values']);
+                    } elseif (isset($where['value'])) {
+                        // Single value.
+                        $where['value'] = $this->convertKey($where['value']);
                     }
                 }
-            } elseif (isset($where['values'])) {
-                if (is_array($where['values'])) {
-                    array_walk_recursive($where['values'], function (&$item, $key) {
-                        if ($item instanceof DateTimeInterface) {
-                            $item = new UTCDateTime($item);
-                        }
-                    });
-                } elseif ($where['values'] instanceof CarbonPeriod) {
-                    $where['values'] = [
-                        new UTCDateTime($where['values']->getStartDate()),
-                        new UTCDateTime($where['values']->getEndDate()),
-                    ];
-                }
+            }
+
+            // Convert CarbonPeriod to DateTime interval.
+            if (isset($where['values']) && $where['values'] instanceof CarbonPeriod) {
+                $where['values'] = [
+                    $where['values']->getStartDate(),
+                    $where['values']->getEndDate(),
+                ];
             }
 
             // In a sequence of "where" clauses, the logical operator of the
@@ -1504,6 +1538,120 @@ class Builder extends BaseBuilder
     }
 
     /**
+     * Set the read preference for the query
+     *
+     * @see https://www.php.net/manual/en/class.mongodb-driver-readpreference.php
+     *
+     * @param  string $mode
+     * @param  array  $tagSets
+     * @param  array  $options
+     *
+     * @return $this
+     */
+    public function readPreference(string $mode, ?array $tagSets = null, ?array $options = null): static
+    {
+        $this->readPreference = new ReadPreference($mode, $tagSets, $options);
+
+        return $this;
+    }
+
+    /**
+     * Performs a full-text search of the field or fields in an Atlas collection.
+     * NOTE: $search is only available for MongoDB Atlas clusters, and is not available for self-managed deployments.
+     *
+     * @see https://www.mongodb.com/docs/atlas/atlas-search/aggregation-stages/search/
+     *
+     * @return Collection<object|array>
+     */
+    public function search(
+        SearchOperatorInterface|array $operator,
+        ?string $index = null,
+        ?array $highlight = null,
+        ?bool $concurrent = null,
+        ?string $count = null,
+        ?string $searchAfter = null,
+        ?string $searchBefore = null,
+        ?bool $scoreDetails = null,
+        ?array $sort = null,
+        ?bool $returnStoredSource = null,
+        ?array $tracking = null,
+    ): Collection {
+        // Forward named arguments to the search stage, skip null values
+        $args = array_filter([
+            'operator' => $operator,
+            'index' => $index,
+            'highlight' => $highlight,
+            'concurrent' => $concurrent,
+            'count' => $count,
+            'searchAfter' => $searchAfter,
+            'searchBefore' => $searchBefore,
+            'scoreDetails' => $scoreDetails,
+            'sort' => $sort,
+            'returnStoredSource' => $returnStoredSource,
+            'tracking' => $tracking,
+        ], fn ($arg) => $arg !== null);
+
+        return $this->aggregate()->search(...$args)->get();
+    }
+
+    /**
+     * Performs a semantic search on data in your Atlas Vector Search index.
+     * NOTE: $vectorSearch is only available for MongoDB Atlas clusters, and is not available for self-managed deployments.
+     *
+     * @see https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-stage/
+     *
+     * @return Collection<object|array>
+     */
+    public function vectorSearch(
+        string $index,
+        string $path,
+        array $queryVector,
+        int $limit,
+        bool $exact = false,
+        QueryInterface|array|null $filter = null,
+        int|null $numCandidates = null,
+    ): Collection {
+        // Forward named arguments to the vectorSearch stage, skip null values
+        $args = array_filter([
+            'index' => $index,
+            'limit' => $limit,
+            'path' => $path,
+            'queryVector' => $queryVector,
+            'exact' => $exact,
+            'filter' => $filter,
+            'numCandidates' => $numCandidates,
+        ], fn ($arg) => $arg !== null);
+
+        return $this->aggregate()
+            ->vectorSearch(...$args)
+            ->addFields(vectorSearchScore: ['$meta' => 'vectorSearchScore'])
+            ->get();
+    }
+
+    /**
+     * Performs an autocomplete search of the field using an Atlas Search index.
+     * NOTE: $search is only available for MongoDB Atlas clusters, and is not available for self-managed deployments.
+     * You must create an Atlas Search index with an autocomplete configuration before you can use this stage.
+     *
+     * @see https://www.mongodb.com/docs/atlas/atlas-search/autocomplete/
+     *
+     * @return Collection<string>
+     */
+    public function autocomplete(string $path, string $query, bool|array $fuzzy = false, string $tokenOrder = 'any'): Collection
+    {
+        $args = ['path' => $path, 'query' => $query, 'tokenOrder' => $tokenOrder];
+        if ($fuzzy === true) {
+            $args['fuzzy'] = ['maxEdits' => 2];
+        } elseif ($fuzzy !== false) {
+            $args['fuzzy'] = $fuzzy;
+        }
+
+        return $this->aggregate()->search(
+            Search::autocomplete(...$args),
+        )->get()->pluck($path);
+    }
+
+    /**
      * Apply the connection's session to options if it's not already specified.
      */
     private function inheritConnectionOptions(array $options = []): array
@@ -1513,6 +1661,10 @@ class Builder extends BaseBuilder
             if ($session) {
                 $options['session'] = $session;
             }
+        }
+
+        if (! isset($options['readPreference']) && isset($this->readPreference)) {
+            $options['readPreference'] = $this->readPreference;
         }
 
         return $options;
@@ -1616,5 +1768,102 @@ class Builder extends BaseBuilder
     public function orWhereIntegerNotInRaw($column, $values, $boolean = 'and')
     {
         throw new BadMethodCallException('This method is not supported by MongoDB');
+    }
+
+    private function aliasIdForQuery(array $values): array
+    {
+        if (array_key_exists('id', $values)) {
+            if (array_key_exists('_id', $values) && $values['id'] !== $values['_id']) {
+                throw new InvalidArgumentException('Cannot have both "id" and "_id" fields.');
+            }
+
+            $values['_id'] = $values['id'];
+            unset($values['id']);
+        }
+
+        foreach ($values as $key => $value) {
+            if (! is_string($key)) {
+                continue;
+            }
+
+            // "->" arrow notation for subfields is an alias for "." dot notation
+            if (str_contains($key, '->')) {
+                $newkey = str_replace('->', '.', $key);
+                if (array_key_exists($newkey, $values) && $value !== $values[$newkey]) {
+                    throw new InvalidArgumentException(sprintf('Cannot have both "%s" and "%s" fields.', $key, $newkey));
+                }
+
+                $values[$newkey] = $value;
+                unset($values[$key]);
+                $key = $newkey;
+            }
+
+            // ".id" subfield are alias for "._id"
+            if (str_ends_with($key, '.id')) {
+                $newkey = substr($key, 0, -3) . '._id';
+                if (array_key_exists($newkey, $values) && $value !== $values[$newkey]) {
+                    throw new InvalidArgumentException(sprintf('Cannot have both "%s" and "%s" fields.', $key, $newkey));
+                }
+
+                $values[substr($key, 0, -3) . '._id'] = $value;
+                unset($values[$key]);
+            }
+        }
+
+        foreach ($values as &$value) {
+            if (is_array($value)) {
+                $value = $this->aliasIdForQuery($value);
+            } elseif ($value instanceof DateTimeInterface) {
+                $value = new UTCDateTime($value);
+            }
+        }
+
+        return $values;
+    }
+
+    /**
+     * @internal
+     *
+     * @psalm-param T $values
+     *
+     * @psalm-return T
+     *
+     * @template T of array|object
+     */
+    public function aliasIdForResult(array|object $values): array|object
+    {
+        if (is_array($values)) {
+            if (array_key_exists('_id', $values) && ! array_key_exists('id', $values)) {
+                $values['id'] = $values['_id'];
+                unset($values['_id']);
+            }
+
+            foreach ($values as $key => $value) {
+                if ($value instanceof UTCDateTime) {
+                    $values[$key] = Date::instance($value->toDateTime())
+                        ->setTimezone(new DateTimeZone(date_default_timezone_get()));
+                } elseif (is_array($value) || is_object($value)) {
+                    $values[$key] = $this->aliasIdForResult($value);
+                }
+            }
+        }
+
+        if ($values instanceof stdClass) {
+            if (property_exists($values, '_id') && ! property_exists($values, 'id')) {
+                $values->id = $values->_id;
+                unset($values->_id);
+            }
+
+            foreach (get_object_vars($values) as $key => $value) {
+                if ($value instanceof UTCDateTime) {
+                    $values->{$key} = Date::instance($value->toDateTime())
+                        ->setTimezone(new DateTimeZone(date_default_timezone_get()));
+                } elseif (is_array($value) || is_object($value)) {
+                    $values->{$key} = $this->aliasIdForResult($value);
+                }
+            }
+        }
+
+        return $values;
     }
 }

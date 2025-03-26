@@ -7,6 +7,11 @@ namespace MongoDB\Laravel\Relations;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo as EloquentMorphTo;
 
+/**
+ * @template TRelatedModel of Model
+ * @template TDeclaringModel of Model
+ * @extends EloquentMorphTo<TRelatedModel, TDeclaringModel>
+ */
 class MorphTo extends EloquentMorphTo
 {
     /** @inheritdoc */
@@ -29,7 +34,7 @@ class MorphTo extends EloquentMorphTo
     {
         $instance = $this->createModelByType($type);
 
-        $key = $instance->getKeyName();
+        $key = $this->ownerKey ?? $instance->getKeyName();
 
         $query = $instance->newQuery();
 

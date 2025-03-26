@@ -3,7 +3,7 @@
         'name' => 'laravel/laravel',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => 'f9edabe762eefca7f6b0cc7569ba422b5bcebf15',
+        'reference' => 'a87443857fbe34478bebd825f51de9f5bb8581aa',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -412,7 +412,7 @@
         'jenssegers/mongodb' => array(
             'dev_requirement' => false,
             'replaced' => array(
-                0 => '4.8.1',
+                0 => '5.2.0',
             ),
         ),
         'kodova/hamcrest-php' => array(
@@ -433,7 +433,7 @@
         'laravel/laravel' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => 'f9edabe762eefca7f6b0cc7569ba422b5bcebf15',
+            'reference' => 'a87443857fbe34478bebd825f51de9f5bb8581aa',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
@@ -581,9 +581,9 @@
             ),
         ),
         'mongodb/laravel-mongodb' => array(
-            'pretty_version' => '4.8.1',
-            'version' => '4.8.1.0',
-            'reference' => 'da3a46a1b4ca25117c1d388dd6348206d04e4a9f',
+            'pretty_version' => '5.2.0',
+            'version' => '5.2.0.0',
+            'reference' => 'e2a068a0deca28e55181f29d0d6799ecbdf8e52e',
             'type' => 'library',
             'install_path' => __DIR__ . '/../mongodb/laravel-mongodb',
             'aliases' => array(),

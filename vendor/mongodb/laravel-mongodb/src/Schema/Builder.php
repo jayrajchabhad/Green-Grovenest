@@ -5,23 +5,34 @@ declare(strict_types=1);
 namespace MongoDB\Laravel\Schema;
 
 use Closure;
+use MongoDB\Collection;
+use MongoDB\Driver\Exception\ServerException;
+use MongoDB\Laravel\Connection;
 use MongoDB\Model\CollectionInfo;
 use MongoDB\Model\IndexInfo;
 
+use function array_column;
 use function array_fill_keys;
+use function array_filter;
 use function array_keys;
+use function array_map;
+use function array_merge;
+use function array_values;
 use function assert;
 use function count;
 use function current;
 use function implode;
+use function in_array;
+use function is_array;
+use function is_string;
 use function iterator_to_array;
 use function sort;
 use function sprintf;
-use function trigger_error;
+use function str_ends_with;
+use function substr;
 use function usort;
 
-use const E_USER_DEPRECATED;
-
+/** @property Connection $connection */
 class Builder extends \Illuminate\Database\Schema\Builder
 {
     /**
@@ -43,6 +54,16 @@ class Builder extends \Illuminate\Database\Schema\Builder
      */
     public function hasColumns($table, array $columns): bool
     {
+        // The field "id" (alias of "_id") always exists in MongoDB documents
+        $columns = array_filter($columns, fn (string $column): bool => ! in_array($column, ['_id', 'id'], true));
+
+        // Any subfield named "*.id" is an alias of "*._id"
+        $columns = array_map(fn (string $column): string => str_ends_with($column, '.id') ? substr($column, 0, -3) . '._id' : $column, $columns);
+
+        if ($columns === []) {
+            return true;
+        }
+
         $collection = $this->connection->table($table);
 
         return $collection
@@ -60,7 +81,7 @@ class Builder extends \Illuminate\Database\Schema\Builder
      */
     public function hasCollection($name)
     {
-        $db = $this->connection->getMongoDB();
+        $db = $this->connection->getDatabase();
 
         $collections = iterator_to_array($db->listCollections([
             'filter' => ['name' => $name],
@@ -73,22 +94,6 @@ class Builder extends \Illuminate\Database\Schema\Builder
     public function hasTable($table)
     {
         return $this->hasCollection($table);
-    }
-
-    /**
-     * Modify a collection on the schema.
-     *
-     * @deprecated since mongodb/laravel-mongodb 4.8, use the function table() instead
-     *
-     * @param string $collection
-     *
-     * @return void
-     */
-    public function collection($collection, Closure $callback)
-    {
-        @trigger_error('Since mongodb/laravel-mongodb 4.8, the method Schema\Builder::collection() is deprecated and will be removed in version 5.0. Use the function table() instead.', E_USER_DEPRECATED);
-
-        $this->table($collection, $callback);
     }
 
     /** @inheritdoc */
@@ -137,9 +142,10 @@ class Builder extends \Illuminate\Database\Schema\Builder
         }
     }
 
-    public function getTables()
+    /** @param string|null $schema Database name */
+    public function getTables($schema = null)
     {
-        $db = $this->connection->getMongoDB();
+        $db = $this->connection->getDatabase($schema);
         $collections = [];
 
         foreach ($db->listCollectionNames() as $collectionName) {
@@ -150,7 +156,8 @@ class Builder extends \Illuminate\Database\Schema\Builder
 
             $collections[] = [
                 'name' => $collectionName,
-                'schema' => null,
+                'schema' => $db->getDatabaseName(),
+                'schema_qualified_name' => $db->getDatabaseName() . '.' . $collectionName,
                 'size' => $stats[0]?->storageStats?->totalSize ?? null,
                 'comment' => null,
                 'collation' => null,
@@ -165,9 +172,29 @@ class Builder extends \Illuminate\Database\Schema\Builder
         return $collections;
     }
 
-    public function getTableListing()
+    /**
+     * @param string|null $schema
+     * @param bool        $schemaQualified If a schema is provided, prefix the collection names with the schema name
+     *
+     * @return array
+     */
+    public function getTableListing($schema = null, $schemaQualified = false)
     {
-        $collections = iterator_to_array($this->connection->getMongoDB()->listCollectionNames());
+        $collections = [];
+
+        if ($schema === null || is_string($schema)) {
+            $collections[$schema ?? 0] = iterator_to_array($this->connection->getDatabase($schema)->listCollectionNames());
+        } elseif (is_array($schema)) {
+            foreach ($schema as $db) {
+                $collections[$db] = iterator_to_array($this->connection->getDatabase($db)->listCollectionNames());
+            }
+        }
+
+        if ($schema && $schemaQualified) {
+            $collections = array_map(fn ($db, $collections) => array_map(static fn ($collection) => $db . '.' . $collection, $collections), array_keys($collections), $collections);
+        }
+
+        $collections = array_merge(...array_values($collections));
 
         sort($collections);
 
@@ -176,7 +203,7 @@ class Builder extends \Illuminate\Database\Schema\Builder
 
     public function getColumns($table)
     {
-        $stats = $this->connection->getMongoDB()->selectCollection($table)->aggregate([
+        $stats = $this->connection->getDatabase()->selectCollection($table)->aggregate([
             // Sample 1,000 documents to get a representative sample of the collection
             ['$sample' => ['size' => 1_000]],
             // Convert each document to an array of fields
@@ -206,16 +233,21 @@ class Builder extends \Illuminate\Database\Schema\Builder
         foreach ($stats as $stat) {
             sort($stat->types);
             $type = implode(', ', $stat->types);
+            $name = $stat->_id;
+            if ($name === '_id') {
+                $name = 'id';
+            }
+
             $columns[] = [
-                'name' => $stat->_id,
+                'name' => $name,
                 'type_name' => $type,
                 'type' => $type,
                 'collation' => null,
-                'nullable' => $stat->_id !== '_id',
+                'nullable' => $name !== 'id',
                 'default' => null,
                 'auto_increment' => false,
                 'comment' => sprintf('%d occurrences', $stat->total),
-                'generation' => $stat->_id === '_id' ? ['type' => 'objectId', 'expression' => null] : null,
+                'generation' => $name === 'id' ? ['type' => 'objectId', 'expression' => null] : null,
             ];
         }
 
@@ -224,9 +256,11 @@ class Builder extends \Illuminate\Database\Schema\Builder
 
     public function getIndexes($table)
     {
-        $indexes = $this->connection->getMongoDB()->selectCollection($table)->listIndexes();
-
+        $collection = $this->connection->getDatabase()->selectCollection($table);
+        assert($collection instanceof Collection);
         $indexList = [];
+
+        $indexes = $collection->listIndexes();
         foreach ($indexes as $index) {
             assert($index instanceof IndexInfo);
             $indexList[] = [
@@ -237,10 +271,38 @@ class Builder extends \Illuminate\Database\Schema\Builder
                     $index->isText() => 'text',
                     $index->is2dSphere() => '2dsphere',
                     $index->isTtl() => 'ttl',
-                    default => 'default',
+                    default => null,
                 },
                 'unique' => $index->isUnique(),
             ];
+        }
+
+        try {
+            $indexes = $collection->listSearchIndexes(['typeMap' => ['root' => 'array', 'array' => 'array', 'document' => 'array']]);
+            foreach ($indexes as $index) {
+                // Status 'DOES_NOT_EXIST' means the index has been dropped but is still in the process of being removed
+                if ($index['status'] === 'DOES_NOT_EXIST') {
+                    continue;
+                }
+
+                $indexList[] = [
+                    'name' => $index['name'],
+                    'columns' => match ($index['type']) {
+                        'search' => array_merge(
+                            $index['latestDefinition']['mappings']['dynamic'] ? ['dynamic'] : [],
+                            array_keys($index['latestDefinition']['mappings']['fields'] ?? []),
+                        ),
+                        'vectorSearch' => array_column($index['latestDefinition']['fields'], 'path'),
+                    },
+                    'type' => $index['type'],
+                    'primary' => false,
+                    'unique' => false,
+                ];
+            }
+        } catch (ServerException $exception) {
+            if (! self::isAtlasSearchNotSupportedException($exception)) {
+                throw $exception;
+            }
         }
 
         return $indexList;
@@ -266,7 +328,7 @@ class Builder extends \Illuminate\Database\Schema\Builder
      */
     public function getCollection($name)
     {
-        $db = $this->connection->getMongoDB();
+        $db = $this->connection->getDatabase();
 
         $collections = iterator_to_array($db->listCollections([
             'filter' => ['name' => $name],
@@ -283,10 +345,22 @@ class Builder extends \Illuminate\Database\Schema\Builder
     protected function getAllCollections()
     {
         $collections = [];
-        foreach ($this->connection->getMongoDB()->listCollections() as $collection) {
+        foreach ($this->connection->getDatabase()->listCollections() as $collection) {
             $collections[] = $collection->getName();
         }
 
         return $collections;
+    }
+
+    /** @internal */
+    public static function isAtlasSearchNotSupportedException(ServerException $e): bool
+    {
+        return in_array($e->getCode(), [
+            59,      // MongoDB 4 to 6, 7-community: no such command: 'createSearchIndexes'
+            40324,   // MongoDB 4 to 6: Unrecognized pipeline stage name: '$listSearchIndexes'
+            115,     // MongoDB 7-ent: Search index commands are only supported with Atlas.
+            6047401, // MongoDB 7: $listSearchIndexes stage is only allowed on MongoDB Atlas
+            31082,   // MongoDB 8: Using Atlas Search Database Commands and the $listSearchIndexes aggregation stage requires additional configuration.
+        ], true);
     }
 }

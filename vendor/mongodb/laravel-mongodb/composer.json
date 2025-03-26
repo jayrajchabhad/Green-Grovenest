@@ -23,34 +23,36 @@
     "license": "MIT",
     "require": {
         "php": "^8.1",
-        "ext-mongodb": "^1.15",
+        "ext-mongodb": "^1.21",
         "composer-runtime-api": "^2.0.0",
-        "illuminate/cache": "^10.36|^11",
-        "illuminate/container": "^10.0|^11",
-        "illuminate/database": "^10.30|^11",
-        "illuminate/events": "^10.0|^11",
-        "illuminate/support": "^10.0|^11",
-        "mongodb/mongodb": "^1.15"
+        "illuminate/cache": "^10.36|^11|^12",
+        "illuminate/container": "^10.0|^11|^12",
+        "illuminate/database": "^10.30|^11|^12",
+        "illuminate/events": "^10.0|^11|^12",
+        "illuminate/support": "^10.0|^11|^12",
+        "mongodb/mongodb": "^1.21",
+        "symfony/http-foundation": "^6.4|^7"
     },
     "require-dev": {
-        "mongodb/builder": "^0.2",
+        "laravel/scout": "^10.3",
         "league/flysystem-gridfs": "^3.28",
         "league/flysystem-read-only": "^3.0",
-        "phpunit/phpunit": "^10.3",
-        "orchestra/testbench": "^8.0|^9.0",
+        "phpunit/phpunit": "^10.3|^11.5.3",
+        "orchestra/testbench": "^8.0|^9.0|^10.0",
         "mockery/mockery": "^1.4.4",
         "doctrine/coding-standard": "12.0.x-dev",
-        "spatie/laravel-query-builder": "^5.6",
-        "phpstan/phpstan": "^1.10"
+        "spatie/laravel-query-builder": "^5.6|^6",
+        "phpstan/phpstan": "^1.10",
+        "rector/rector": "^1.2"
     },
     "conflict": {
         "illuminate/bus": "< 10.37.2"
     },
     "suggest": {
-        "league/flysystem-gridfs": "Filesystem storage in MongoDB with GridFS",
-        "mongodb/builder": "Provides a fluent aggregation builder for MongoDB pipelines"
+        "league/flysystem-gridfs": "Filesystem storage in MongoDB with GridFS"
     },
     "minimum-stability": "dev",
+    "prefer-stable": true,
     "replace": {
         "jenssegers/mongodb": "self.version"
     },
@@ -68,7 +70,6 @@
         "laravel": {
             "providers": [
                 "MongoDB\\Laravel\\MongoDBServiceProvider",
-                "MongoDB\\Laravel\\MongoDBQueueServiceProvider",
                 "MongoDB\\Laravel\\MongoDBBusServiceProvider"
             ]
         }
@@ -77,7 +78,8 @@
         "test": "phpunit",
         "test:coverage": "phpunit --coverage-clover ./coverage.xml",
         "cs": "phpcs",
-        "cs:fix": "phpcbf"
+        "cs:fix": "phpcbf",
+        "rector": "rector"
     },
     "config": {
         "allow-plugins": {

@@ -8,6 +8,7 @@ use Composer\InstalledVersions;
 use Illuminate\Database\Connection as BaseConnection;
 use InvalidArgumentException;
 use MongoDB\Client;
+use MongoDB\Collection;
 use MongoDB\Database;
 use MongoDB\Driver\Exception\AuthenticationException;
 use MongoDB\Driver\Exception\ConnectionException;
@@ -21,6 +22,7 @@ use function filter_var;
 use function implode;
 use function is_array;
 use function preg_match;
+use function sprintf;
 use function str_contains;
 use function trigger_error;
 
@@ -49,6 +51,8 @@ class Connection extends BaseConnection
      */
     protected $connection;
 
+    private ?CommandSubscriber $commandSubscriber = null;
+
     /**
      * Create a new database connection instance.
      */
@@ -64,9 +68,10 @@ class Connection extends BaseConnection
 
         // Create the connection
         $this->connection = $this->createConnection($dsn, $config, $options);
+        $this->database = $this->getDefaultDatabaseName($dsn, $config);
 
         // Select database
-        $this->db = $this->connection->selectDatabase($this->getDefaultDatabaseName($dsn, $config));
+        $this->db = $this->connection->getDatabase($this->database);
 
         $this->tablePrefix = $config['prefix'] ?? '';
 
@@ -75,22 +80,6 @@ class Connection extends BaseConnection
         $this->useDefaultSchemaGrammar();
 
         $this->useDefaultQueryGrammar();
-    }
-
-    /**
-     * Begin a fluent query against a database collection.
-     *
-     * @deprecated since mongodb/laravel-mongodb 4.8, use the function table() instead
-     *
-     * @param  string $collection
-     *
-     * @return Query\Builder
-     */
-    public function collection($collection)
-    {
-        @trigger_error('Since mongodb/laravel-mongodb 4.8, the method Connection::collection() is deprecated and will be removed in version 5.0. Use the table() method instead.', E_USER_DEPRECATED);
-
-        return $this->table($collection);
     }
 
     /**
@@ -115,9 +104,9 @@ class Connection extends BaseConnection
      *
      * @return Collection
      */
-    public function getCollection($name)
+    public function getCollection($name): Collection
     {
-        return new Collection($this, $this->db->selectCollection($this->tablePrefix . $name));
+        return $this->db->selectCollection($this->tablePrefix . $name);
     }
 
     /** @inheritdoc */
@@ -129,29 +118,87 @@ class Connection extends BaseConnection
     /**
      * Get the MongoDB database object.
      *
+     * @deprecated since mongodb/laravel-mongodb:5.2, use getDatabase() instead
+     *
      * @return Database
      */
     public function getMongoDB()
     {
+        trigger_error(sprintf('Since mongodb/laravel-mongodb:5.2, Method "%s()" is deprecated, use "getDatabase()" instead.', __FUNCTION__), E_USER_DEPRECATED);
+
         return $this->db;
     }
 
     /**
-     * return MongoDB object.
+     * Get the MongoDB database object.
+     *
+     * @param string|null $name Name of the database, if not provided the default database will be returned.
+     *
+     * @return Database
+     */
+    public function getDatabase(?string $name = null): Database
+    {
+        if ($name && $name !== $this->database) {
+            return $this->connection->getDatabase($name);
+        }
+
+        return $this->db;
+    }
+
+    /**
+     * Return MongoDB object.
+     *
+     * @deprecated since mongodb/laravel-mongodb:5.2, use getClient() instead
      *
      * @return Client
      */
     public function getMongoClient()
     {
-        return $this->connection;
+        trigger_error(sprintf('Since mongodb/laravel-mongodb:5.2, method "%s()" is deprecated, use "getClient()" instead.', __FUNCTION__), E_USER_DEPRECATED);
+
+        return $this->getClient();
     }
 
     /**
-     * {@inheritDoc}
+     * Get the MongoDB client.
      */
-    public function getDatabaseName()
+    public function getClient(): ?Client
     {
-        return $this->getMongoDB()->getDatabaseName();
+        return $this->connection;
+    }
+
+    public function enableQueryLog()
+    {
+        parent::enableQueryLog();
+
+        if (! $this->commandSubscriber) {
+            $this->commandSubscriber = new CommandSubscriber($this);
+            $this->connection->addSubscriber($this->commandSubscriber);
+        }
+    }
+
+    public function disableQueryLog()
+    {
+        parent::disableQueryLog();
+
+        if ($this->commandSubscriber) {
+            $this->connection->removeSubscriber($this->commandSubscriber);
+            $this->commandSubscriber = null;
+        }
+    }
+
+    protected function withFreshQueryLog($callback)
+    {
+        try {
+            return parent::withFreshQueryLog($callback);
+        } finally {
+            // The parent method enable query log using enableQueryLog()
+            // but disables it by setting $loggingQueries to false. We need to
+            // remove the subscriber for performance.
+            if (! $this->loggingQueries) {
+                $this->disableQueryLog();
+            }
+        }
     }
 
     /**
@@ -198,6 +245,10 @@ class Connection extends BaseConnection
             $options['password'] = $config['password'];
         }
 
+        if (isset($config['name'])) {
+            $driverOptions += ['connectionName' => $config['name']];
+        }
+
         return new Client($dsn, $options, $driverOptions);
     }
 
@@ -210,12 +261,13 @@ class Connection extends BaseConnection
      */
     public function ping(): void
     {
-        $this->getMongoClient()->getManager()->selectServer(new ReadPreference(ReadPreference::PRIMARY_PREFERRED));
+        $this->getClient()->getManager()->selectServer(new ReadPreference(ReadPreference::PRIMARY_PREFERRED));
     }
 
     /** @inheritdoc */
     public function disconnect()
     {
+        $this->disableQueryLog();
         $this->connection = null;
     }
 
@@ -283,12 +335,6 @@ class Connection extends BaseConnection
     }
 
     /** @inheritdoc */
-    public function getElapsedTime($start)
-    {
-        return parent::getElapsedTime($start);
-    }
-
-    /** @inheritdoc */
     public function getDriverName()
     {
         return 'mongodb';
@@ -309,13 +355,15 @@ class Connection extends BaseConnection
     /** @inheritdoc */
     protected function getDefaultQueryGrammar()
     {
-        return new Query\Grammar();
+        // Argument added in Laravel 12
+        return new Query\Grammar($this);
     }
 
     /** @inheritdoc */
     protected function getDefaultSchemaGrammar()
     {
-        return new Schema\Grammar();
+        // Argument added in Laravel 12
+        return new Schema\Grammar($this);
     }
 
     /**
