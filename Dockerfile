@@ -1,5 +1,5 @@
-# Use an official PHP image with Apache and necessary extensions
-FROM php:8.1-apache
+# Use an official PHP 8.3 image with Apache and necessary extensions
+FROM php:8.3-apache
 
 # Set environment variables
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
@@ -53,7 +53,10 @@ RUN a2enmod rewrite
 EXPOSE 80
 
 # Run Laravel artisan commands to optimize and migrate
-RUN php artisan optimize && \
+RUN composer install --no-dev --optimize-autoloader && \
+    php artisan config:cache && \
+    php artisan route:cache && \
+    php artisan view:cache && \
     php artisan migrate --force
 
 # Start Apache in the foreground
